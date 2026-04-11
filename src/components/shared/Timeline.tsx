@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useCallback, useRef } from 'react';
 import type { SimulationTick, Anomaly } from '../../simulation/types';
 import { fmtTime } from '../../lib/utils';
 
@@ -13,73 +13,70 @@ interface TimelineProps {
 }
 
 export function Timeline({ totalSeconds, currentSecond, ticks, anomalies, onSeek }: TimelineProps) {
-  // Mini goodput sparkline data
-  const sparkline = useMemo(() => {
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  const bars = useMemo(() => {
     if (ticks.length === 0) return [];
-    const max = Math.max(...ticks.map(t => t.goodput_Mbps), 1);
+    const maxGoodput = Math.max(...ticks.map(t => t.goodput_Mbps), 1);
     return ticks.map(t => ({
-      second: t.second,
-      height: (t.goodput_Mbps / max) * 100,
+      h: (t.goodput_Mbps / maxGoodput) * 100,
       health: t.systemHealth,
     }));
   }, [ticks]);
 
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    onSeek(Math.round(x * totalSeconds));
+  }, [totalSeconds, onSeek]);
+
+  const pct = totalSeconds > 0 ? (currentSecond / totalSeconds) * 100 : 0;
+
   return (
-    <div className="panel py-2 px-4">
-      {/* Sparkline minimap */}
-      <div className="relative h-12 mb-1 bg-slate-800 rounded overflow-hidden">
+    <div className="space-y-1">
+      {/* Track */}
+      <div ref={trackRef} className="timeline-track" onClick={handleClick}>
         {/* Goodput bars */}
-        <div className="absolute inset-0 flex items-end">
-          {sparkline.map((s) => (
-            <div
-              key={s.second}
-              className="flex-1 min-w-0"
+        <div className="absolute inset-0 flex items-end px-px">
+          {bars.map((b, i) => (
+            <div key={i} className="timeline-bar flex-1"
               style={{
-                height: `${s.height}%`,
-                backgroundColor:
-                  s.health === 'critical' ? 'var(--danger)' :
-                  s.health === 'degraded' ? 'var(--warning)' :
-                  'var(--accent)',
-                opacity: s.second === currentSecond ? 1 : 0.6,
+                height: `${b.h}%`,
+                background: b.health === 'critical' ? 'var(--danger)'
+                  : b.health === 'degraded' ? 'var(--warning)'
+                  : 'var(--accent)',
+                opacity: Math.abs(i - currentSecond) < 3 ? 0.7 : 0.35,
               }}
             />
           ))}
         </div>
 
-        {/* Anomaly markers */}
+        {/* Anomaly flags */}
         {anomalies.filter(a => a.severity === 'severe').map((a) => (
-          <div
-            key={a.id}
-            data-testid={`anomaly-marker-${a.id}`}
-            className="absolute top-0 w-0.5 h-full bg-red-500 opacity-80 cursor-pointer"
+          <div key={a.id} data-testid={`anomaly-marker-${a.id}`}
+            className="absolute top-0 bottom-0 w-px bg-[var(--danger)] opacity-60 z-5"
             style={{ left: `${(a.time_s / totalSeconds) * 100}%` }}
             title={a.description}
-            onClick={() => onSeek(a.time_s)}
           />
         ))}
 
-        {/* Current position indicator */}
-        <div
-          className="absolute top-0 w-0.5 h-full bg-white z-10"
-          style={{ left: `${(currentSecond / totalSeconds) * 100}%` }}
-        />
+        {/* Cursor */}
+        <div className="timeline-cursor" style={{ left: `${pct}%` }} />
+
+        {/* Time labels */}
+        <div className="absolute top-1 left-2 text-[9px] text-[var(--text-dim)] font-mono">{fmtTime(0)}</div>
+        <div className="absolute top-1 right-2 text-[9px] text-[var(--text-dim)] font-mono">{fmtTime(totalSeconds)}</div>
       </div>
 
-      {/* Slider */}
-      <div className="flex items-center gap-3">
-        <span className="text-xs text-slate-500 w-12">{fmtTime(0)}</span>
-        <input
-          type="range"
-          data-testid="slider-timeline"
-          aria-label="Timeline position"
-          min="0"
-          max={totalSeconds}
-          value={currentSecond}
-          onChange={(e) => onSeek(parseInt(e.target.value, 10))}
-          className="flex-1 accent-cyan-500"
-        />
-        <span className="text-xs text-slate-500 w-12 text-right">{fmtTime(totalSeconds)}</span>
-      </div>
+      {/* Slider (hidden visually, for accessibility & agent-browser) */}
+      <input type="range" data-testid="slider-timeline" aria-label="Timeline position"
+        min="0" max={totalSeconds} value={currentSecond}
+        onChange={(e) => onSeek(parseInt(e.target.value, 10))}
+        className="w-full h-1 accent-[var(--accent)] opacity-0 absolute pointer-events-none"
+        style={{ marginTop: -10 }}
+      />
     </div>
   );
 }
