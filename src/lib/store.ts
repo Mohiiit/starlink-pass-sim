@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { SimulationResult, SimulationTick, FaultScenario, FaultEvent, PacketRecord } from '../simulation/types';
 import { DEFAULT_GROUND_STATION, ELEVATION_MASK_DEG } from './constants';
 
@@ -51,7 +52,9 @@ interface SimulationStore {
   updateConfig: (updates: Partial<SimConfig>) => void;
 }
 
-export const useSimulationStore = create<SimulationStore>((set, get) => ({
+export const useSimulationStore = create<SimulationStore>()(
+  persist(
+  (set, get) => ({
   status: 'idle',
   result: null,
   error: null,
@@ -142,4 +145,16 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
   },
   toggleConfig: () => set((s) => ({ showConfig: !s.showConfig })),
   updateConfig: (updates) => set((s) => ({ config: { ...s.config, ...updates } })),
-}));
+}),
+  {
+    name: 'starlink-sim-config',
+    // Only persist user config and preferences — NOT the simulation result
+    partialize: (state) => ({
+      scenario: state.scenario,
+      rainAttenuation_dB: state.rainAttenuation_dB,
+      config: state.config,
+      playbackSpeed: state.playbackSpeed,
+      activeView: state.activeView,
+    }),
+  },
+));
