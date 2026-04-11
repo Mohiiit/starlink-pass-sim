@@ -74,8 +74,7 @@ export function Timeline({ totalSeconds, currentSecond, ticks, anomalies, onSeek
       <input type="range" data-testid="slider-timeline" aria-label="Timeline position"
         min="0" max={totalSeconds} value={currentSecond}
         onChange={(e) => onSeek(parseInt(e.target.value, 10))}
-        className="w-full h-1 accent-[var(--accent)] opacity-0 absolute pointer-events-none"
-        style={{ marginTop: -10 }}
+        className="w-full h-1.5 accent-[var(--accent)] cursor-pointer"
       />
     </div>
   );

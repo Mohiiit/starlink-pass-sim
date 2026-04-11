@@ -138,96 +138,16 @@ export function findNextPass(
  * a near-overhead pass.
  */
 export function generateDemoPass(
-  satrec: satellite.SatRec,
+  _satrec: satellite.SatRec,
   gs: GroundStationConfig,
   targetMaxElevation_deg: number = 78,
   targetDuration_s: number = 480,
 ): PassWindow {
-  // Strategy: search for a time when the satellite's sub-satellite point
-  // is near the ground station (guarantees high elevation pass)
-  const startSearch = new Date();
-  const searchMs = 24 * 60 * 60 * 1000; // search 24 hours
-  const stepMs = 60 * 1000; // 1-minute steps
-
-  let bestTime = startSearch;
-  let bestDistance = Infinity;
-
-  for (let t = 0; t < searchMs; t += stepMs) {
-    const date = new Date(startSearch.getTime() + t);
-    try {
-      const elev = getElevation(satrec, gs, date);
-      if (elev > 0) {
-        // Check how close to target max elevation
-        const diff = Math.abs(elev - targetMaxElevation_deg);
-        if (diff < bestDistance) {
-          bestDistance = diff;
-          bestTime = date;
-        }
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  // If we found a real pass near target elevation, use it
-  if (bestDistance < 15) {
-    // Back up to find the AOS
-    let aosTime = bestTime;
-    for (let t = 0; t < 600; t++) {
-      const date = new Date(bestTime.getTime() - t * 1000);
-      const elev = getElevation(satrec, gs, date);
-      if (elev < ELEVATION_MASK_DEG) {
-        aosTime = new Date(date.getTime() + 1000);
-        break;
-      }
-    }
-
-    // Forward to find LOS
-    let losTime = bestTime;
-    for (let t = 0; t < 600; t++) {
-      const date = new Date(bestTime.getTime() + t * 1000);
-      const elev = getElevation(satrec, gs, date);
-      if (elev < ELEVATION_MASK_DEG) {
-        losTime = new Date(date.getTime() - 1000);
-        break;
-      }
-    }
-
-    const durationSeconds = Math.round((losTime.getTime() - aosTime.getTime()) / 1000);
-
-    // Generate geometry
-    const geometry: PassGeometry[] = [];
-    let maxElev = 0;
-    let tcaDate = aosTime;
-
-    for (let s = 0; s <= durationSeconds; s++) {
-      const date = new Date(aosTime.getTime() + s * 1000);
-      try {
-        const { position, velocity } = propagate(satrec, date);
-        const geo = computeLookAngles(gs, position, velocity, date, s);
-        geometry.push(geo);
-        if (geo.elevation_deg > maxElev) {
-          maxElev = geo.elevation_deg;
-          tcaDate = date;
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    if (geometry.length > 30) {
-      return {
-        aos: aosTime,
-        tca: tcaDate,
-        los: losTime,
-        maxElevation_deg: maxElev,
-        durationSeconds,
-        geometry,
-      };
-    }
-  }
-
-  // Fallback: generate synthetic pass geometry analytically
+  // Always use analytical synthetic pass centered on the ground station.
+  // The default TLE has a fabricated epoch (2024) which makes SGP4
+  // propagation unreliable years later. The synthetic pass guarantees
+  // the satellite passes directly over the chosen ground station with
+  // correct geometry, regardless of TLE validity.
   return generateSyntheticPass(gs, targetMaxElevation_deg, targetDuration_s);
 }
 

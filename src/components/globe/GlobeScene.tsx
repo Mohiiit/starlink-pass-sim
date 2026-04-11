@@ -325,10 +325,13 @@ function DataBeam({ satLat, satLon, gsLat, gsLon, goodput, health, elevation }: 
 function Scene(props: Props) {
   const groupRef = useRef<THREE.Group>(null!);
 
+  // Auto-rotate globe to show the midpoint between satellite and ground station
   useFrame(() => {
     if (groupRef.current) {
-      const ty = -props.satelliteLon * DEG2RAD;
-      const tx = props.satelliteLat * DEG2RAD * 0.3;
+      const midLon = (props.satelliteLon + props.groundStationLon) / 2;
+      const midLat = (props.satelliteLat + props.groundStationLat) / 2;
+      const ty = -midLon * DEG2RAD;
+      const tx = midLat * DEG2RAD * 0.4;
       groupRef.current.rotation.y += (ty - groupRef.current.rotation.y) * 0.03;
       groupRef.current.rotation.x += (tx - groupRef.current.rotation.x) * 0.03;
     }

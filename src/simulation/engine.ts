@@ -54,10 +54,17 @@ export function runSimulation(config?: Partial<SimulationConfig>): SimulationRes
   const satrec = parseTLE(cfg.tle.line1, cfg.tle.line2);
   let passWindow: PassWindow;
 
-  // Try to find a real pass first, fall back to demo pass
+  // Try to find a real pass via SGP4 propagation first
   const realPass = findNextPass(satrec.satrec, cfg.groundStation, new Date(), cfg.elevationMask_deg);
-  if (realPass && realPass.maxElevation_deg >= 30) {
-    passWindow = realPass;
+  if (realPass && realPass.maxElevation_deg >= 40 && realPass.geometry.length > 30) {
+    // Validate the pass is actually near the ground station (stale TLEs can produce garbage)
+    const midGeo = realPass.geometry[Math.floor(realPass.geometry.length / 2)];
+    const latDiff = Math.abs(midGeo.subSatLat_deg - cfg.groundStation.lat);
+    if (latDiff < 30) {
+      passWindow = realPass;
+    } else {
+      passWindow = generateDemoPass(satrec.satrec, cfg.groundStation, 78, 480);
+    }
   } else {
     passWindow = generateDemoPass(satrec.satrec, cfg.groundStation, 78, 480);
   }
