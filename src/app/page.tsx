@@ -38,7 +38,15 @@ function SimulatorContent() {
     if (t) store.setCurrentSecond(parseInt(t, 10));
   }, [searchParams]);
 
-  useEffect(() => { if (store.status === 'idle') store.runSimulation(); }, []);
+  // Auto-run simulation after localStorage hydration (small delay to ensure config is loaded)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (useSimulationStore.getState().status === 'idle') {
+        useSimulationStore.getState().runSimulation();
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (store.isPlaying && store.result) {
@@ -72,7 +80,7 @@ function SimulatorContent() {
         <Controls
           scenario={store.scenario}
           onScenarioChange={handleScenarioChange}
-          rainAttenuation={store.rainAttenuation_dB}
+          rainAttenuation={store.config.rainAttenuation_dB}
           onRainChange={store.setRainAttenuation}
           isPlaying={store.isPlaying}
           playbackSpeed={store.playbackSpeed}

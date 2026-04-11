@@ -17,7 +17,7 @@ import { SOLAR_CONSTANT_W_M2 } from '../../lib/constants';
 
 // ---- Solar panel parameters ----
 const SOLAR_EFFICIENCY = 0.30; // GaAs triple-junction cell efficiency
-const SOLAR_PANEL_AREA_M2 = 12; // total illuminated area
+const SOLAR_PANEL_AREA_M2 = 3; // ~3 m² (realistic for Starlink v1.5 single solar panel)
 const SOLAR_DEGRADATION = 0.95; // BOL-to-current degradation factor
 
 // ---- Battery parameters ----

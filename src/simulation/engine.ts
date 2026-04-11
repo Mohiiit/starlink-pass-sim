@@ -196,7 +196,8 @@ export function runSimulation(config?: Partial<SimulationConfig>): SimulationRes
     let desiredBackoff = 4; // nominal 4 dB backoff
     if (thermalState.throttling === 'mild') desiredBackoff += 2;
     if (thermalState.throttling === 'severe') desiredBackoff += 4;
-    if (powerState.powerMode >= 2) desiredBackoff += 2;
+    if (powerState.powerMode === 3) desiredBackoff = 30; // survival mode: effectively no transmission
+    else if (powerState.powerMode >= 2) desiredBackoff += 2;
 
     const { backoffMod, p1dbReduction } = applyPAFaults(desiredBackoff, faultState.activeFaults);
     const { freqOffset, unlock } = applyOscillatorFaults(
@@ -287,6 +288,20 @@ export function runSimulation(config?: Partial<SimulationConfig>): SimulationRes
       s,
       cfg.channelBandwidth_Hz,
     );
+
+    // Fill in causalChain for each packet from current tick's hardware state
+    for (const pkt of protocol.packetsThisSecond) {
+      pkt.causalChain = {
+        elevation_deg: geo.elevation_deg,
+        scanAngle_deg: steeringAngle,
+        antennaGain_dBi: antenna.effectiveGain_dBi,
+        paBackoff_dB: rfChain.pa.backoff_dB,
+        paTemp_C: thermalState.paJunction_C,
+        txPower_dBm: rfChain.txPower_dBm,
+        fspl_dB: linkBudget.fspl_dB,
+        effectiveSNR_dB: linkBudget.effectiveSNR_dB,
+      };
+    }
 
     allPackets.push(...protocol.packetsThisSecond);
 
