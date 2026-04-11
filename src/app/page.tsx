@@ -10,7 +10,6 @@ import { MetricCards } from '../components/shared/MetricCards';
 import dynamic from 'next/dynamic';
 import { ConfigPanel } from '../components/shared/ConfigPanel';
 import { Tooltip } from '../components/shared/Tooltip';
-import { HelpOverlay } from '../components/shared/HelpOverlay';
 import { GuidedTour, TourTrigger } from '../components/shared/GuidedTour';
 
 const GlobeScene = dynamic(() => import('../components/globe/GlobeScene'), {
@@ -192,7 +191,7 @@ function SimulatorContent() {
           T+{fmtTime(store.currentSecond)}
         </span>
 
-        <HelpOverlay />
+
 
         <Tooltip content="Open the simulation drawer for station, weather, and custom fault settings.">
           <button onClick={store.toggleConfig} data-testid="btn-config" aria-label="Simulation config" title="Open simulation configuration"
