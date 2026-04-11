@@ -152,44 +152,69 @@ export function generateDemoPass(
 }
 
 /**
- * Purely analytical synthetic pass — guarantees realistic geometry
- * without depending on TLE propagation finding a convenient pass.
+ * Analytical synthetic pass with full orbital approach → pass → departure.
+ *
+ * Generates ~900 seconds of geometry:
+ * - Approach: satellite orbits toward ground station (below elevation mask)
+ * - Pass: satellite overhead, link active (above mask)
+ * - Departure: satellite orbits away (below mask again)
+ *
+ * The satellite traces a great-circle arc across the globe, giving
+ * a realistic orbiting visualization — not just the pass window.
  */
 function generateSyntheticPass(
   gs: GroundStationConfig,
   maxElevation_deg: number,
-  duration_s: number,
+  _passDuration_s: number,
 ): PassWindow {
   const now = new Date();
   const aosDate = now;
   const geometry: PassGeometry[] = [];
 
-  const halfDuration = duration_s / 2;
-  const maxElevRad = (maxElevation_deg * Math.PI) / 180;
-  const maskRad = (ELEVATION_MASK_DEG * Math.PI) / 180;
+  // Total timeline: approach + pass + departure
+  const totalDuration = 900; // 15 minutes of orbital arc
+  const halfTotal = totalDuration / 2;
   const altKm = 550;
+  const Re = 6371;
+  const hOverR = altKm / Re;
 
-  for (let s = 0; s <= duration_s; s++) {
-    // Elevation follows a smooth curve: peak at midpoint
-    // Use a modified cosine to approximate real pass geometry
-    const t = (s - halfDuration) / halfDuration; // -1 to +1
-    const elevRad = maskRad + (maxElevRad - maskRad) * Math.cos((t * Math.PI) / 2) ** 2;
-    const elevation_deg = (elevRad * 180) / Math.PI;
+  // Elevation curve: bell shape from -15° at edges to maxElev at center.
+  // The pass (elevation > mask) occupies the middle ~480 seconds.
+  const approachDepth = 15; // degrees below horizon at timeline edges
+  const elevRange = maxElevation_deg + approachDepth;
 
-    // Slant range from elevation and altitude
-    // range = R_earth * (sqrt((h/R + 1)^2 - cos^2(el)) - sin(el))
-    const Re = 6371;
-    const sinEl = Math.sin(elevRad);
-    const cosEl = Math.cos(elevRad);
-    const hOverR = altKm / Re;
+  // Orbital parameters for sub-satellite track
+  // Starlink at 53° inclination — satellite sweeps across latitude
+  const orbitHeading_deg = 40; // ground track heading (NE to SW)
+  const headingRad = orbitHeading_deg * Math.PI / 180;
+  // Angular rate: ~0.065 deg/s for LEO at 550km (orbital velocity / Earth radius)
+  const angularRate_degPerSec = 0.065;
+
+  for (let s = 0; s <= totalDuration; s++) {
+    const t = (s - halfTotal) / halfTotal; // -1 to +1
+
+    // ── Elevation: smooth bell curve ──
+    const elevFraction = Math.cos((t * Math.PI) / 2) ** 2; // 1 at center, 0 at edges
+    const elevation_deg = -approachDepth + elevRange * elevFraction;
+    const elevRad = Math.max(elevation_deg, -20) * Math.PI / 180;
+
+    // ── Slant range from elevation ──
+    const sinEl = Math.sin(Math.max(elevRad, 0.01));
+    const cosEl = Math.cos(Math.max(elevRad, 0.01));
     const slantRange_km = Re * (Math.sqrt((hOverR + 1) ** 2 - cosEl ** 2) - sinEl);
 
-    // Azimuth: sweep from ~NE to SE (typical high pass)
-    const azimuth_deg = 45 + 90 * (s / duration_s);
+    // ── Sub-satellite point: trace a great-circle arc ──
+    // At t=0 the satellite is directly over the ground station.
+    // It moves along the orbit heading at the orbital angular rate.
+    const arcDistance_deg = (s - halfTotal) * angularRate_degPerSec;
+    const subSatLat_deg = gs.lat + arcDistance_deg * Math.cos(headingRad);
+    const subSatLon_deg = gs.lon + arcDistance_deg * Math.sin(headingRad) / Math.cos(gs.lat * Math.PI / 180);
 
-    // Range rate: negative (approaching) before TCA, positive after
-    // Approximate from geometry
-    const rangeRate_km_s = -7.5 * Math.sin((t * Math.PI) / 2);
+    // ── Azimuth: sweep through ~180° as satellite crosses overhead ──
+    const azimuth_deg = (orbitHeading_deg + 180 + 180 * (s / totalDuration)) % 360;
+
+    // ── Range rate: approaching (negative) then receding (positive) ──
+    const rangeRate_km_s = 7.5 * Math.sin((t * Math.PI) / 2);
 
     const date = new Date(aosDate.getTime() + s * 1000);
 
@@ -198,22 +223,22 @@ function generateSyntheticPass(
       secondIntoPass: s,
       elevation_deg,
       azimuth_deg,
-      slantRange_km,
+      slantRange_km: Math.max(slantRange_km, altKm), // floor at orbital altitude
       rangeRate_km_s,
       altitude_km: altKm,
-      subSatLat_deg: gs.lat + 3 * t, // satellite moves ~6° latitude
-      subSatLon_deg: gs.lon + 2 * t,
+      subSatLat_deg,
+      subSatLon_deg,
     });
   }
 
-  const tcaIndex = Math.floor(halfDuration);
+  const tcaIndex = halfTotal;
 
   return {
     aos: aosDate,
     tca: geometry[tcaIndex].timestamp,
-    los: new Date(aosDate.getTime() + duration_s * 1000),
-    maxElevation_deg: maxElevation_deg,
-    durationSeconds: duration_s,
+    los: new Date(aosDate.getTime() + totalDuration * 1000),
+    maxElevation_deg,
+    durationSeconds: totalDuration,
     geometry,
   };
 }

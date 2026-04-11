@@ -395,7 +395,7 @@ export function runSimulation(config?: Partial<SimulationConfig>): SimulationRes
 
   return {
     passWindow,
-    groundStation: DEFAULT_GROUND_STATION,
+    groundStation: cfg.groundStation,
     ticks,
     packetTrace: allPackets,
     eventLog,
