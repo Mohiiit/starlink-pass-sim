@@ -8,6 +8,7 @@ import { Controls } from '../components/shared/Controls';
 import { Timeline } from '../components/shared/Timeline';
 import { MetricCards } from '../components/shared/MetricCards';
 import { GlobeCanvas } from '../components/globe/GlobeCanvas';
+import { ConfigPanel } from '../components/shared/ConfigPanel';
 import { SatelliteDashboard } from '../components/satellite/SatelliteDashboard';
 import { GroundStationView } from '../components/ground-station/GroundStationView';
 import { CausalityView } from '../components/causality/CausalityView';
@@ -80,6 +81,16 @@ function SimulatorContent() {
           T+{fmtTime(store.currentSecond)}
         </span>
 
+        <button onClick={store.toggleConfig} data-testid="btn-config" aria-label="Simulation config"
+          className={`text-[10px] px-2.5 py-1 rounded border transition-all ${
+            store.showConfig
+              ? 'bg-[var(--accent-soft)] text-[var(--accent)] border-[var(--border-active)]'
+              : 'text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-secondary)] hover:border-[var(--border-active)]'
+          }`}
+          style={{ fontFamily: 'var(--font-jura)' }}>
+          ⚙ CONFIG
+        </button>
+
         <span data-testid="sim-status"
           className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${
             store.status === 'complete' ? 'bg-[var(--success-soft)] text-[var(--success)]'
@@ -92,9 +103,17 @@ function SimulatorContent() {
       </header>
 
       {/* ═══ MAIN CONTENT ═══ */}
-      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex min-h-0 relative">
+        {/* Config Panel (slide-over) */}
+        {store.showConfig && (
+          <div className="absolute inset-y-0 left-0 w-[340px] z-30 border-r border-[var(--border-active)]"
+            style={{ background: 'var(--bg-surface)' }}>
+            <ConfigPanel />
+          </div>
+        )}
+
         {/* LEFT: Globe */}
-        <div className="w-[55%] min-w-[400px] p-3 flex flex-col">
+        <div className={`${store.showConfig ? 'ml-[340px]' : ''} w-[55%] min-w-[400px] p-3 flex flex-col transition-all duration-300`}>
           <div className="flex-1 min-h-0">
             {tick && gs ? (
               <GlobeCanvas
@@ -108,6 +127,7 @@ function SimulatorContent() {
                 orbitPath={orbitPath}
                 currentIndex={store.currentSecond}
                 systemHealth={tick.systemHealth}
+                goodput_Mbps={tick.goodput_Mbps}
               />
             ) : (
               <div className="globe-container w-full h-full flex items-center justify-center">

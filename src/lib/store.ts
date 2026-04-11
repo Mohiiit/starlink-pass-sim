@@ -1,5 +1,14 @@
 import { create } from 'zustand';
-import type { SimulationResult, SimulationTick, FaultScenario, PacketRecord } from '../simulation/types';
+import type { SimulationResult, SimulationTick, FaultScenario, FaultEvent, PacketRecord } from '../simulation/types';
+import { DEFAULT_GROUND_STATION, ELEVATION_MASK_DEG } from './constants';
+
+export interface SimConfig {
+  groundStation: { name: string; lat: number; lon: number };
+  initialBatterySoC: number;
+  elevationMask_deg: number;
+  rainAttenuation_dB: number;
+  customFaults: FaultEvent[];
+}
 
 interface SimulationStore {
   // Simulation state
@@ -10,7 +19,7 @@ interface SimulationStore {
   // Playback state
   currentSecond: number;
   isPlaying: boolean;
-  playbackSpeed: number; // 1x, 2x, 5x, 10x
+  playbackSpeed: number;
 
   // View state
   activeView: 'satellite' | 'ground-station' | 'causality';
@@ -19,6 +28,8 @@ interface SimulationStore {
   // Config
   scenario: FaultScenario;
   rainAttenuation_dB: number;
+  config: SimConfig;
+  showConfig: boolean;
 
   // Derived state helpers
   currentTick: () => SimulationTick | null;
@@ -36,6 +47,8 @@ interface SimulationStore {
   setActiveSubsystemTab: (tab: string) => void;
   setScenario: (scenario: FaultScenario) => void;
   setRainAttenuation: (dB: number) => void;
+  toggleConfig: () => void;
+  updateConfig: (updates: Partial<SimConfig>) => void;
 }
 
 export const useSimulationStore = create<SimulationStore>((set, get) => ({
@@ -49,6 +62,14 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
   activeSubsystemTab: 'antenna',
   scenario: 'clean',
   rainAttenuation_dB: 0,
+  showConfig: false,
+  config: {
+    groundStation: { ...DEFAULT_GROUND_STATION },
+    initialBatterySoC: 80,
+    elevationMask_deg: ELEVATION_MASK_DEG,
+    rainAttenuation_dB: 0,
+    customFaults: [],
+  },
 
   currentTick: () => {
     const { result, currentSecond } = get();
@@ -64,14 +85,18 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
 
   runSimulation: async (scenario?: FaultScenario) => {
     const sc = scenario ?? get().scenario;
-    set({ status: 'running', error: null, scenario: sc });
+    const cfg = get().config;
+    set({ status: 'running', error: null, scenario: sc, rainAttenuation_dB: cfg.rainAttenuation_dB });
 
     try {
-      // Dynamic import to avoid SSR issues with satellite.js
       const { runSimulation } = await import('../simulation/engine');
       const result = runSimulation({
         faultScenario: sc,
-        rainAttenuation_dB: get().rainAttenuation_dB,
+        rainAttenuation_dB: cfg.rainAttenuation_dB,
+        groundStation: { ...cfg.groundStation, alt: 0.01 },
+        initialBatterySoC: cfg.initialBatterySoC,
+        elevationMask_deg: cfg.elevationMask_deg,
+        customFaults: cfg.customFaults.length > 0 ? cfg.customFaults : undefined,
       });
       set({ status: 'complete', result, currentSecond: 0 });
     } catch (e) {
@@ -82,8 +107,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
   setCurrentSecond: (s: number) => {
     const { result } = get();
     if (!result) return;
-    const clamped = Math.max(0, Math.min(s, result.ticks.length - 1));
-    set({ currentSecond: clamped });
+    set({ currentSecond: Math.max(0, Math.min(s, result.ticks.length - 1)) });
   },
 
   play: () => set({ isPlaying: true }),
@@ -108,13 +132,14 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
   },
 
   setPlaybackSpeed: (speed: number) => set({ playbackSpeed: speed }),
-
   setActiveView: (view) => set({ activeView: view }),
-
   setActiveSubsystemTab: (tab) =>
     set({ activeSubsystemTab: tab as SimulationStore['activeSubsystemTab'] }),
-
   setScenario: (scenario) => set({ scenario }),
-
-  setRainAttenuation: (dB) => set({ rainAttenuation_dB: dB }),
+  setRainAttenuation: (dB) => {
+    set({ rainAttenuation_dB: dB });
+    set((s) => ({ config: { ...s.config, rainAttenuation_dB: dB } }));
+  },
+  toggleConfig: () => set((s) => ({ showConfig: !s.showConfig })),
+  updateConfig: (updates) => set((s) => ({ config: { ...s.config, ...updates } })),
 }));
