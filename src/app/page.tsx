@@ -7,8 +7,17 @@ import type { FaultScenario } from '../simulation/types';
 import { Controls } from '../components/shared/Controls';
 import { Timeline } from '../components/shared/Timeline';
 import { MetricCards } from '../components/shared/MetricCards';
-import { GlobeCanvas } from '../components/globe/GlobeCanvas';
+import dynamic from 'next/dynamic';
 import { ConfigPanel } from '../components/shared/ConfigPanel';
+
+const GlobeScene = dynamic(() => import('../components/globe/GlobeScene'), {
+  ssr: false,
+  loading: () => (
+    <div className="globe-container w-full h-full flex items-center justify-center">
+      <span className="text-[var(--text-dim)] text-sm">Loading 3D globe...</span>
+    </div>
+  ),
+});
 import { SatelliteDashboard } from '../components/satellite/SatelliteDashboard';
 import { GroundStationView } from '../components/ground-station/GroundStationView';
 import { CausalityView } from '../components/causality/CausalityView';
@@ -116,7 +125,7 @@ function SimulatorContent() {
         <div className={`${store.showConfig ? 'ml-[340px]' : ''} w-[55%] min-w-[400px] p-3 flex flex-col transition-all duration-300`}>
           <div className="flex-1 min-h-0">
             {tick && gs ? (
-              <GlobeCanvas
+              <GlobeScene
                 satelliteLat={tick.orbit.subSatLat_deg}
                 satelliteLon={tick.orbit.subSatLon_deg}
                 groundStationLat={gs.lat}
