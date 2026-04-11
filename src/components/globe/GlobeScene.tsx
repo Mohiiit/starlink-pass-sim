@@ -210,15 +210,20 @@ function Satellite({ lat, lon, health }: { lat: number; lon: number; health: str
       </group>
       {/* Inner glow */}
       <mesh ref={glowRef}>
-        <sphereGeometry args={[0.12, 16, 16]} />
-        <meshBasicMaterial color={color} transparent opacity={0.4} depthWrite={false} />
+        <sphereGeometry args={[0.15, 16, 16]} />
+        <meshBasicMaterial color={color} transparent opacity={0.5} depthWrite={false} />
+      </mesh>
+      {/* Mid glow */}
+      <mesh>
+        <sphereGeometry args={[0.25, 16, 16]} />
+        <meshBasicMaterial color={color} transparent opacity={0.2} depthWrite={false} />
       </mesh>
       {/* Outer glow */}
       <mesh>
-        <sphereGeometry args={[0.22, 16, 16]} />
-        <meshBasicMaterial color={color} transparent opacity={0.15} depthWrite={false} />
+        <sphereGeometry args={[0.4, 16, 16]} />
+        <meshBasicMaterial color={color} transparent opacity={0.08} depthWrite={false} />
       </mesh>
-      <pointLight ref={lightRef} color={color} intensity={3.0} distance={1.5} decay={2} />
+      <pointLight ref={lightRef} color={color} intensity={4.0} distance={2.0} decay={2} />
     </group>
   );
 }
@@ -420,15 +425,18 @@ function DataBeam({ satLat, satLon, gsLat, gsLon, goodput, health, elevation, be
 function Scene(props: Props) {
   const groupRef = useRef<THREE.Group>(null!);
 
-  // Auto-rotate globe so ground station faces camera (lower hemisphere)
-  // and satellite floats visibly above it
+  // Auto-rotate globe so the beam is always visible from an angle.
+  // At high elevation the satellite is directly above the GS — we offset
+  // the rotation so the beam cone is seen from the side, not end-on.
   useFrame(() => {
     if (groupRef.current) {
-      // Rotate to place ground station facing camera
+      // Base: center on ground station longitude
       const ty = -props.groundStationLon * DEG2RAD;
-      // Tilt slightly so GS is in lower half, satellite above
-      const tx = (props.groundStationLat * 0.5 - 10) * DEG2RAD;
-      groupRef.current.rotation.y += (ty - groupRef.current.rotation.y) * 0.03;
+      // Add a constant angular offset so the GS is slightly to the side,
+      // and the beam sweeps across the viewport instead of going straight down
+      const lonOffset = 35 * DEG2RAD; // 35° offset = beam always at angle
+      const tx = (props.groundStationLat * 0.4 - 15) * DEG2RAD;
+      groupRef.current.rotation.y += ((ty + lonOffset) - groupRef.current.rotation.y) * 0.03;
       groupRef.current.rotation.x += (tx - groupRef.current.rotation.x) * 0.03;
     }
   });
