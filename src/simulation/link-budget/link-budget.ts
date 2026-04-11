@@ -108,21 +108,32 @@ export function computeLinkBudget(
   // G/T = rx antenna gain (dBi) - 10*log10(T_sys)
   const gOverT_dBK = GS_ANTENNA_GAIN_DBI - 10 * Math.log10(systemNoiseTemp_K);
 
+  // ---- Polarization mismatch loss ----
+  // Starlink uses circular polarization. At high scan angles, the axial ratio
+  // degrades, increasing polarization mismatch. Rain also depolarizes the signal.
+  // Model: base 0.3 dB co-pol mismatch + scan-angle degradation + rain depolarization
+  const scanAngle_deg = Math.max(0, 90 - elevation_deg);
+  const polBaseLoss_dB = 0.3; // co-pol alignment imperfection
+  const polScanDegradation_dB = 0.2 * (scanAngle_deg / 70) ** 2; // axial ratio degrades at scan
+  const polRainLoss_dB = rainLoss_dB > 0 ? 0.1 * rainLoss_dB : 0; // rain depolarization
+  const polarizationLoss_dB = polBaseLoss_dB + polScanDegradation_dB + polRainLoss_dB;
+
   // ---- Carrier-to-noise ratio ----
-  // C/N = EIRP - FSPL - L_atmo - L_rain + G/T - k_B(dBW) - 10*log10(BW)
+  // C/N = EIRP - FSPL - L_atmo - L_rain - L_pol + G/T - k_B(dBW) - 10*log10(BW)
   const cnr_dB =
     eirp_dBW -
     fspl_dB -
     atmosphericLoss_dB -
-    rainLoss_dB +
+    rainLoss_dB -
+    polarizationLoss_dB +
     gOverT_dBK -
     BOLTZMANN_K_DBW -
     10 * Math.log10(CHANNEL_BANDWIDTH_HZ);
 
   // ---- Carrier and noise powers (for reporting) ----
-  // C = EIRP - FSPL - L_atmo - L_rain + G_rx
+  // C = EIRP - FSPL - L_atmo - L_rain - L_pol + G_rx
   const carrierPower_dBW =
-    eirp_dBW - fspl_dB - atmosphericLoss_dB - rainLoss_dB + GS_ANTENNA_GAIN_DBI;
+    eirp_dBW - fspl_dB - atmosphericLoss_dB - rainLoss_dB - polarizationLoss_dB + GS_ANTENNA_GAIN_DBI;
 
   // N = k_B(dBW) + 10*log10(T_sys) + 10*log10(BW)
   const noisePower_dBW =

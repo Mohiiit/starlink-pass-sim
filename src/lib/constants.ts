@@ -82,9 +82,9 @@ export const DEFAULT_GROUND_STATION = {
   alt: 0.01, // km above sea level
 };
 
-// A recent Starlink TLE (STARLINK-1007, NORAD 44713)
-// These are real orbital elements — valid for demonstration
+// Real Starlink TLE — STARLINK-1008 (NORAD 44714)
+// Fetched from CelesTrak on 2026-04-11. 53° inclination, ~540 km altitude.
 export const DEFAULT_TLE = {
-  line1: '1 44713U 19074A   24001.50000000  .00001234  00000-0  12345-3 0  9991',
-  line2: '2 44713  53.0536 120.5280 0001234  90.0000 270.0000 15.06300000 10001',
+  line1: '1 44714U 19074B   26101.18331139  .00044052  00000+0  13020-2 0  9992',
+  line2: '2 44714  53.1549  27.2699 0003259 140.0923 220.0320 15.34524170353857',
 };

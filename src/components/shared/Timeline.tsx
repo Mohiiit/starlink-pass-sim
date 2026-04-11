@@ -24,6 +24,24 @@ export function Timeline({ totalSeconds, currentSecond, ticks, anomalies, onSeek
     }));
   }, [ticks]);
 
+  const passMarkers = useMemo(() => {
+    if (ticks.length === 0) return null;
+    let aos = -1, los = -1, tca = -1;
+    let maxGoodput = 0;
+    for (let i = 0; i < ticks.length; i++) {
+      if (ticks[i].goodput_Mbps > 0) {
+        if (aos === -1) aos = i;
+        los = i;
+        if (ticks[i].goodput_Mbps > maxGoodput) {
+          maxGoodput = ticks[i].goodput_Mbps;
+          tca = i;
+        }
+      }
+    }
+    if (aos === -1) return null;
+    return { aos, tca, los };
+  }, [ticks]);
+
   const handleClick = useCallback((e: React.MouseEvent) => {
     const track = trackRef.current;
     if (!track) return;
@@ -52,6 +70,21 @@ export function Timeline({ totalSeconds, currentSecond, ticks, anomalies, onSeek
             />
           ))}
         </div>
+
+        {/* AOS / TCA / LOS markers */}
+        {passMarkers && (
+          <>
+            <div className="absolute top-0 bottom-0 w-px z-10" style={{ left: `${(passMarkers.aos / totalSeconds) * 100}%`, background: '#22c55e' }}>
+              <span className="absolute -top-0.5 -translate-x-1/2 text-[8px] font-mono font-semibold" style={{ color: '#22c55e' }}>AOS</span>
+            </div>
+            <div className="absolute top-0 bottom-0 w-px z-10" style={{ left: `${(passMarkers.tca / totalSeconds) * 100}%`, background: '#00e5ff' }}>
+              <span className="absolute -top-0.5 -translate-x-1/2 text-[8px] font-mono font-semibold" style={{ color: '#00e5ff' }}>TCA</span>
+            </div>
+            <div className="absolute top-0 bottom-0 w-px z-10" style={{ left: `${(passMarkers.los / totalSeconds) * 100}%`, background: '#f97316' }}>
+              <span className="absolute -top-0.5 -translate-x-1/2 text-[8px] font-mono font-semibold" style={{ color: '#f97316' }}>LOS</span>
+            </div>
+          </>
+        )}
 
         {/* Anomaly flags */}
         {anomalies.filter(a => a.severity === 'severe').map((a) => (

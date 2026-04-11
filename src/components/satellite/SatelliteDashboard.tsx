@@ -68,6 +68,93 @@ function MiniChart({ data, currentIndex, color = '#06b6d4' }: { data: number[]; 
   );
 }
 
+function BeamPattern({ steeringAngle_deg, beamwidth_deg }: { steeringAngle_deg: number; beamwidth_deg: number }) {
+  const size = 120;
+  const cx = size / 2;
+  const cy = size - 10;
+  const radius = size - 20;
+
+  // Build the gain pattern path: cos^1.35(theta) from -90 to +90
+  const patternPoints: string[] = [];
+  for (let deg = -90; deg <= 90; deg += 2) {
+    const theta = (deg * Math.PI) / 180;
+    const gain = Math.pow(Math.max(0, Math.cos(theta)), 1.35);
+    const r = gain * radius;
+    const plotAngle = ((deg - 90) * Math.PI) / 180; // 0 deg at top
+    const x = cx + r * Math.cos(plotAngle);
+    const y = cy + r * Math.sin(plotAngle);
+    patternPoints.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+  }
+
+  // Steering angle indicator line
+  const steerRad = ((steeringAngle_deg - 90) * Math.PI) / 180;
+  const steerGain = Math.pow(Math.max(0, Math.cos((steeringAngle_deg * Math.PI) / 180)), 1.35);
+  const steerLen = steerGain * radius;
+  const steerX = cx + steerLen * Math.cos(steerRad);
+  const steerY = cy + steerLen * Math.sin(steerRad);
+
+  // Scan loss region: shade beyond 45 deg on each side
+  const scanArc: string[] = [];
+  for (let deg = 45; deg <= 90; deg += 2) {
+    const plotAngle = ((deg - 90) * Math.PI) / 180;
+    scanArc.push(`${(cx + radius * Math.cos(plotAngle)).toFixed(1)},${(cy + radius * Math.sin(plotAngle)).toFixed(1)}`);
+  }
+  const scanArcLeft: string[] = [];
+  for (let deg = -90; deg <= -45; deg += 2) {
+    const plotAngle = ((deg - 90) * Math.PI) / 180;
+    scanArcLeft.push(`${(cx + radius * Math.cos(plotAngle)).toFixed(1)},${(cy + radius * Math.sin(plotAngle)).toFixed(1)}`);
+  }
+
+  // Grid arcs at 25%, 50%, 75%
+  const gridArcs = [0.25, 0.5, 0.75].map((frac) => {
+    const r = frac * radius;
+    const pts: string[] = [];
+    for (let deg = -90; deg <= 90; deg += 5) {
+      const a = ((deg - 90) * Math.PI) / 180;
+      pts.push(`${(cx + r * Math.cos(a)).toFixed(1)},${(cy + r * Math.sin(a)).toFixed(1)}`);
+    }
+    return pts.join(' ');
+  });
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="block" data-testid="beam-pattern">
+      {/* Background */}
+      <rect width={size} height={size} fill="transparent" />
+
+      {/* Grid arcs */}
+      {gridArcs.map((pts, i) => (
+        <polyline key={i} points={pts} fill="none" stroke="#334155" strokeWidth="0.5" />
+      ))}
+      {/* Outer arc */}
+      <polyline points={[...Array.from({ length: 91 }, (_, i) => {
+        const deg = i * 2 - 90;
+        const a = ((deg - 90) * Math.PI) / 180;
+        return `${(cx + radius * Math.cos(a)).toFixed(1)},${(cy + radius * Math.sin(a)).toFixed(1)}`;
+      })].join(' ')} fill="none" stroke="#475569" strokeWidth="1" />
+      {/* Boresight line */}
+      <line x1={cx} y1={cy} x2={cx} y2={cy - radius} stroke="#475569" strokeWidth="0.5" strokeDasharray="2,2" />
+
+      {/* Scan loss shading (right side > 45 deg) */}
+      <polygon points={`${cx},${cy} ${scanArc.join(' ')} ${cx + radius * Math.cos(0)},${cy + radius * Math.sin(0)}`} fill="#f59e0b" opacity="0.1" />
+      {/* Scan loss shading (left side < -45 deg) */}
+      <polygon points={`${(cx + radius * Math.cos(Math.PI)).toFixed(1)},${(cy + radius * Math.sin(Math.PI)).toFixed(1)} ${scanArcLeft.join(' ')} ${cx},${cy}`} fill="#f59e0b" opacity="0.1" />
+
+      {/* Gain pattern */}
+      <polyline points={patternPoints.join(' ')} fill="none" stroke="#06b6d4" strokeWidth="1.5" opacity="0.9" />
+
+      {/* Steering angle indicator */}
+      <line x1={cx} y1={cy} x2={steerX} y2={steerY} stroke="#ef4444" strokeWidth="1.5" />
+      <circle cx={steerX} cy={steerY} r="2.5" fill="#ef4444" />
+
+      {/* Labels */}
+      <text x={cx} y={8} textAnchor="middle" fill="#94a3b8" fontSize="7">0°</text>
+      <text x={8} y={cy - 2} textAnchor="middle" fill="#94a3b8" fontSize="7">90°</text>
+      <text x={size - 8} y={cy - 2} textAnchor="middle" fill="#94a3b8" fontSize="7">90°</text>
+      <text x={cx} y={size - 1} textAnchor="middle" fill="#64748b" fontSize="6">{fmt(steeringAngle_deg)}° steer</text>
+    </svg>
+  );
+}
+
 function AntennaPanel({ tick, allTicks }: { tick: SimulationTick; allTicks: SimulationTick[] }) {
   const gainHistory = useMemo(() => allTicks.map(t => t.antenna.effectiveGain_dBi), [allTicks]);
 
@@ -86,6 +173,10 @@ function AntennaPanel({ tick, allTicks }: { tick: SimulationTick; allTicks: Simu
       <div>
         <p className="text-xs text-slate-500 mb-1">Effective Gain over Pass</p>
         <MiniChart data={gainHistory} currentIndex={tick.second} />
+        <div className="mt-3 flex flex-col items-center">
+          <p className="text-xs text-slate-500 mb-1">Beam Pattern</p>
+          <BeamPattern steeringAngle_deg={tick.antenna.steeringAngle_deg} beamwidth_deg={tick.antenna.beamwidth_deg} />
+        </div>
       </div>
     </div>
   );

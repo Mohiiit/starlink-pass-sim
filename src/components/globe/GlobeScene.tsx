@@ -121,7 +121,7 @@ function GroundStation({ lat, lon }: { lat: number; lon: number }) {
     <group position={pos}>
       {/* Dish base */}
       <mesh>
-        <sphereGeometry args={[0.012, 16, 16]} />
+        <sphereGeometry args={[0.02, 16, 16]} />
         <meshBasicMaterial color="#22c55e" />
       </mesh>
       {/* Beacon glow */}
@@ -131,12 +131,12 @@ function GroundStation({ lat, lon }: { lat: number; lon: number }) {
       </mesh>
       {/* Pulse ring */}
       <mesh ref={ringRef} quaternion={quaternion}>
-        <ringGeometry args={[0.03, 0.036, 32]} />
+        <ringGeometry args={[0.045, 0.051, 32]} />
         <meshBasicMaterial color="#22c55e" transparent opacity={0.5} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
       {/* Outer marker ring */}
       <mesh quaternion={quaternion}>
-        <ringGeometry args={[0.045, 0.05, 32]} />
+        <ringGeometry args={[0.06, 0.065, 32]} />
         <meshBasicMaterial color="#22c55e" transparent opacity={0.1} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
     </group>
@@ -165,7 +165,7 @@ function Satellite({ lat, lon, health }: { lat: number; lon: number; health: str
       glowRef.current.scale.setScalar(s);
     }
     if (lightRef.current) {
-      lightRef.current.intensity = 1.0 + 0.4 * Math.sin(clock.elapsedTime * 3);
+      lightRef.current.intensity = 2.0 + 0.4 * Math.sin(clock.elapsedTime * 3);
     }
   });
 
@@ -174,17 +174,17 @@ function Satellite({ lat, lon, health }: { lat: number; lon: number; health: str
       <group quaternion={orientation}>
         {/* Main bus (flat box - Starlink is a flat-panel design) */}
         <mesh>
-          <boxGeometry args={[0.04, 0.005, 0.025]} />
+          <boxGeometry args={[0.045, 0.012, 0.025]} />
           <meshStandardMaterial color="#888899" metalness={0.6} roughness={0.3} />
         </mesh>
         {/* Antenna face (bottom) - emissive to show it's active */}
         <mesh position={[0, -0.003, 0]}>
-          <boxGeometry args={[0.035, 0.001, 0.022]} />
+          <boxGeometry args={[0.04, 0.001, 0.022]} />
           <meshBasicMaterial color={color} transparent opacity={0.5} />
         </mesh>
         {/* Solar panel - single large wing (Starlink v1.5 style) */}
         <mesh position={[0.05, 0.001, 0]}>
-          <boxGeometry args={[0.055, 0.001, 0.03]} />
+          <boxGeometry args={[0.065, 0.001, 0.035]} />
           <meshStandardMaterial color="#1a2a50" metalness={0.3} roughness={0.4} emissive="#0a1530" emissiveIntensity={0.3} />
         </mesh>
         {/* Solar panel hinge */}
@@ -195,15 +195,15 @@ function Satellite({ lat, lon, health }: { lat: number; lon: number; health: str
       </group>
       {/* Inner glow */}
       <mesh ref={glowRef}>
-        <sphereGeometry args={[0.045, 16, 16]} />
-        <meshBasicMaterial color={color} transparent opacity={0.15} depthWrite={false} />
+        <sphereGeometry args={[0.07, 16, 16]} />
+        <meshBasicMaterial color={color} transparent opacity={0.25} depthWrite={false} />
       </mesh>
       {/* Outer glow */}
       <mesh>
-        <sphereGeometry args={[0.08, 16, 16]} />
-        <meshBasicMaterial color={color} transparent opacity={0.06} depthWrite={false} />
+        <sphereGeometry args={[0.12, 16, 16]} />
+        <meshBasicMaterial color={color} transparent opacity={0.1} depthWrite={false} />
       </mesh>
-      <pointLight ref={lightRef} color={color} intensity={1.0} distance={0.6} decay={2} />
+      <pointLight ref={lightRef} color={color} intensity={2.0} distance={1.0} decay={2} />
     </group>
   );
 }
@@ -245,7 +245,7 @@ const ParticlePoints = forwardRef<THREE.Points, { maxCount: number; posArray: Fl
     return (
       <points ref={ref}>
         <bufferGeometry ref={geomRef} />
-        <pointsMaterial size={0.016} color={color} transparent opacity={0.9} sizeAttenuation depthWrite={false} />
+        <pointsMaterial size={0.025} color={color} transparent opacity={0.9} sizeAttenuation depthWrite={false} />
       </points>
     );
   },
@@ -312,10 +312,10 @@ function DataBeam({ satLat, satLon, gsLat, gsLon, goodput, health, elevation }: 
   return (
     <group>
       <mesh ref={beamRef} position={conePos} quaternion={coneQuat}>
-        <cylinderGeometry args={[0.005, 0.03, coneLength, 16, 1, true]} />
-        <meshBasicMaterial color={color} transparent opacity={0.08} side={THREE.DoubleSide} depthWrite={false} />
+        <cylinderGeometry args={[0.008, 0.045, coneLength, 16, 1, true]} />
+        <meshBasicMaterial color={color} transparent opacity={0.12} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
-      <Line points={[satPos, gsPos]} color={color} lineWidth={2} transparent opacity={0.55} />
+      <Line points={[satPos, gsPos]} color={color} lineWidth={3} transparent opacity={0.7} />
       <ParticlePoints ref={particlesRef} maxCount={MAX} posArray={pArr.current} color={color} />
     </group>
   );

@@ -67,6 +67,13 @@ function SimulatorContent() {
     return store.result.ticks.map(t => [t.orbit.subSatLon_deg, t.orbit.subSatLat_deg] as [number, number]);
   }, [store.result]);
 
+  const cumulativeMB = useMemo(() => {
+    if (!store.result) return 0;
+    return store.result.ticks
+      .slice(0, store.currentSecond + 1)
+      .reduce((sum, t) => sum + t.goodput_Mbps / 8, 0);
+  }, [store.result, store.currentSecond]);
+
   const gs = store.result?.groundStation;
 
   return (
@@ -159,7 +166,7 @@ function SimulatorContent() {
         {/* RIGHT: Metrics + Detail */}
         <div className="flex-1 min-w-[380px] flex flex-col p-3 pl-0 gap-2 overflow-hidden">
           {/* Metric cards */}
-          {tick && <MetricCards tick={tick} />}
+          {tick && <MetricCards tick={tick} cumulativeMB={cumulativeMB} />}
 
           {/* View tabs */}
           <div className="flex gap-1" role="tablist">

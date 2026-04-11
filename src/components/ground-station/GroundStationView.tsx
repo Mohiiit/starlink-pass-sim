@@ -65,6 +65,134 @@ function PacketDetail({ pkt }: { pkt: PacketRecord }) {
   );
 }
 
+function ConstellationDiagram({ modulation, snr_dB }: { modulation: string; snr_dB: number }) {
+  const size = 140;
+  const cx = size / 2;
+  const cy = size / 2;
+  const scale = size / 2 - 16; // margin for labels
+
+  // Determine ideal symbol positions based on modulation
+  const idealPoints: [number, number][] = useMemo(() => {
+    const mod = modulation.toUpperCase();
+    if (mod.includes('QPSK') || mod.includes('4PSK')) {
+      // QPSK: 4 points at (+-1, +-1) normalized
+      const s = 1 / Math.SQRT2;
+      return [[s, s], [s, -s], [-s, s], [-s, -s]];
+    }
+    if (mod.includes('8PSK')) {
+      return Array.from({ length: 8 }, (_, i) => {
+        const a = (i * Math.PI * 2) / 8;
+        return [Math.cos(a), Math.sin(a)] as [number, number];
+      });
+    }
+    if (mod.includes('16APSK') || mod.includes('16QAM') || mod.includes('16-')) {
+      // 4x4 QAM grid at +-1, +-3 normalized
+      const pts: [number, number][] = [];
+      for (const i of [-3, -1, 1, 3]) {
+        for (const q of [-3, -1, 1, 3]) {
+          pts.push([i / 3, q / 3]);
+        }
+      }
+      return pts;
+    }
+    if (mod.includes('32APSK') || mod.includes('32QAM')) {
+      // Cross-shaped 32QAM
+      const pts: [number, number][] = [];
+      for (const i of [-5, -3, -1, 1, 3, 5]) {
+        for (const q of [-5, -3, -1, 1, 3, 5]) {
+          if (Math.abs(i) + Math.abs(q) <= 8) {
+            pts.push([i / 5, q / 5]);
+          }
+        }
+      }
+      return pts.length > 0 ? pts : [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    }
+    if (mod.includes('64APSK') || mod.includes('64QAM')) {
+      // 8x8 QAM grid
+      const pts: [number, number][] = [];
+      for (const i of [-7, -5, -3, -1, 1, 3, 5, 7]) {
+        for (const q of [-7, -5, -3, -1, 1, 3, 5, 7]) {
+          pts.push([i / 7, q / 7]);
+        }
+      }
+      return pts;
+    }
+    // Fallback: BPSK-like
+    return [[1, 0], [-1, 0]];
+  }, [modulation]);
+
+  // Generate scattered points with seeded pseudo-random noise
+  const scatteredPoints = useMemo(() => {
+    const snrLin = Math.pow(10, snr_dB / 10);
+    const noiseStd = 1 / Math.sqrt(Math.max(snrLin, 1));
+    const pointsPerSymbol = Math.max(2, Math.floor(50 / idealPoints.length));
+    const result: [number, number][] = [];
+
+    // Simple seeded PRNG (mulberry32)
+    let seed = 42;
+    const rand = () => {
+      seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    // Box-Muller for Gaussian
+    const gaussRand = () => {
+      const u1 = Math.max(1e-10, rand());
+      const u2 = rand();
+      return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    };
+
+    for (const [si, sq] of idealPoints) {
+      for (let j = 0; j < pointsPerSymbol; j++) {
+        result.push([
+          si + gaussRand() * noiseStd * 0.5,
+          sq + gaussRand() * noiseStd * 0.5,
+        ]);
+      }
+    }
+    return result;
+  }, [idealPoints, snr_dB]);
+
+  // Map I/Q coordinates to SVG pixel positions
+  const toX = (i: number) => cx + i * (scale * 0.7);
+  const toY = (q: number) => cy - q * (scale * 0.7);
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      className="block bg-slate-950 rounded"
+      data-testid="constellation-diagram"
+    >
+      {/* Grid */}
+      <line x1={cx} y1={4} x2={cx} y2={size - 4} stroke="#334155" strokeWidth="0.5" />
+      <line x1={4} y1={cy} x2={size - 4} y2={cy} stroke="#334155" strokeWidth="0.5" />
+      {/* Quadrant lines */}
+      <line x1={4} y1={4} x2={size - 4} y2={size - 4} stroke="#1e293b" strokeWidth="0.3" />
+      <line x1={size - 4} y1={4} x2={4} y2={size - 4} stroke="#1e293b" strokeWidth="0.3" />
+
+      {/* Scattered received symbols */}
+      {scatteredPoints.map(([i, q], idx) => (
+        <circle key={idx} cx={toX(i)} cy={toY(q)} r="1.2" fill="#06b6d4" opacity="0.6" />
+      ))}
+
+      {/* Ideal positions */}
+      {idealPoints.map(([i, q], idx) => (
+        <circle key={`ideal-${idx}`} cx={toX(i)} cy={toY(q)} r="2.5" fill="none" stroke="#06b6d4" strokeWidth="0.8" opacity="0.5" />
+      ))}
+
+      {/* Axis labels */}
+      <text x={size - 6} y={cy - 3} textAnchor="end" fill="#64748b" fontSize="7">I</text>
+      <text x={cx + 4} y={8} textAnchor="start" fill="#64748b" fontSize="7">Q</text>
+
+      {/* Modulation label */}
+      <text x={4} y={size - 4} fill="#94a3b8" fontSize="6">{modulation}</text>
+    </svg>
+  );
+}
+
 export function GroundStationView({ tick, allTicks, packets, currentSecond }: Props) {
   const [filter, setFilter] = useState<PacketFilter>('all');
   const [selectedPacket, setSelectedPacket] = useState<PacketRecord | null>(null);
@@ -115,6 +243,15 @@ export function GroundStationView({ tick, allTicks, packets, currentSecond }: Pr
           <div className={`metric-value text-lg ${tick.rfChain.oscillator.locked ? 'text-green-400' : 'text-red-400'}`}>
             {tick.rfChain.oscillator.locked ? 'LOCKED' : 'UNLOCKED'}
           </div>
+        </div>
+      </div>
+
+      {/* Constellation Diagram */}
+      <div className="flex items-center gap-4">
+        <ConstellationDiagram modulation={tick.protocol.modulationName} snr_dB={tick.linkBudget.effectiveSNR_dB} />
+        <div className="text-xs text-slate-500 space-y-1">
+          <div>Modulation: <span className="text-cyan-400">{tick.protocol.modulationName}</span></div>
+          <div>SNR: <span className="text-slate-300">{fmt(tick.linkBudget.effectiveSNR_dB)} dB</span></div>
         </div>
       </div>
 

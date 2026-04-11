@@ -5,6 +5,7 @@ import { fmt, fmtSci } from '../../lib/utils';
 
 interface Props {
   tick: SimulationTick;
+  cumulativeMB?: number;
 }
 
 function cardStatus(value: number, warnThreshold: number, critThreshold: number, invert = false): string {
@@ -53,7 +54,7 @@ function Card({
   );
 }
 
-export function MetricCards({ tick }: Props) {
+export function MetricCards({ tick, cumulativeMB = 0 }: Props) {
   return (
     <div className="space-y-2">
       {/* Primary metric cards */}
@@ -119,6 +120,7 @@ export function MetricCards({ tick }: Props) {
         <Compact testId="metric-antenna-gain" label="GAIN" value={`${fmt(tick.antenna.effectiveGain_dBi)} dBi`} dataValue={tick.antenna.effectiveGain_dBi} />
         <Compact testId="metric-pa-output" label="PA" value={`${fmt(tick.rfChain.pa.outputPower_dBm)} dBm`} dataValue={tick.rfChain.pa.outputPower_dBm} />
         <Compact testId="metric-scan-loss" label="SCAN" value={`${fmt(Math.abs(tick.antenna.scanLoss_dB))} dB`} dataValue={Math.abs(tick.antenna.scanLoss_dB)} />
+        <Compact testId="metric-data-transferred" label="DATA" value={`${cumulativeMB.toFixed(1)} MB`} dataValue={cumulativeMB} accent />
         <div className="flex-1" />
         <span
           data-testid="metric-system-health"
