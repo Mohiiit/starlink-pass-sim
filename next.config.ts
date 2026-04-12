@@ -1,8 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: 'export',
-  basePath: process.env.GITHUB_ACTIONS ? '/starlink-pass-sim' : '',
   images: { unoptimized: true },
 };
 
