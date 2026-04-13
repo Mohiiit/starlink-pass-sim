@@ -4,6 +4,19 @@ import { propagate } from './tle';
 import { computeLookAngles, toObserverGd } from './ground-station';
 import { ELEVATION_MASK_DEG } from '../../lib/constants';
 
+function rotateEcfVectorToEci(
+  vec: { x: number; y: number; z: number },
+  gmst: number,
+) {
+  const cosGmst = Math.cos(gmst);
+  const sinGmst = Math.sin(gmst);
+  return {
+    x: vec.x * cosGmst - vec.y * sinGmst,
+    y: vec.x * sinGmst + vec.y * cosGmst,
+    z: vec.z,
+  };
+}
+
 /**
  * Compute elevation angle at a given time (fast, for searching).
  */
@@ -138,17 +151,116 @@ export function findNextPass(
  * a near-overhead pass.
  */
 export function generateDemoPass(
-  _satrec: satellite.SatRec,
+  satrec: satellite.SatRec,
   gs: GroundStationConfig,
   targetMaxElevation_deg: number = 78,
-  targetDuration_s: number = 480,
+  _targetDuration_s: number = 480,
+  options?: {
+    anchorDate?: Date;
+    searchHours?: number;
+    allowSyntheticFallback?: boolean;
+    elevationMask_deg?: number;
+  },
 ): PassWindow {
-  // Always use analytical synthetic pass centered on the ground station.
-  // The default TLE has a fabricated epoch (2024) which makes SGP4
-  // propagation unreliable years later. The synthetic pass guarantees
-  // the satellite passes directly over the chosen ground station with
-  // correct geometry, regardless of TLE validity.
-  return generateSyntheticPass(gs, targetMaxElevation_deg, targetDuration_s);
+  void _targetDuration_s;
+  const realPass = findBestPass(satrec, gs, {
+    startDate: options?.anchorDate,
+    searchHours: options?.searchHours,
+    elevationMask_deg: options?.elevationMask_deg,
+  });
+  if (realPass) return realPass;
+
+  if (options?.allowSyntheticFallback === false) {
+    throw new Error('Unable to resolve a real pass from the provided TLE in the requested search window.');
+  }
+
+  return generateSyntheticPass(gs, targetMaxElevation_deg);
+}
+
+/**
+ * Search 24 hours of orbital data for the highest-elevation pass over
+ * a ground station. Returns the pass extended with approach/departure
+ * phases so the satellite is visibly orbiting on the globe.
+ */
+export function findBestPass(
+  satrec: satellite.SatRec,
+  gs: GroundStationConfig,
+  options?: {
+    startDate?: Date;
+    searchHours?: number;
+    elevationMask_deg?: number;
+  },
+): PassWindow | null {
+  const startSearch = options?.startDate ?? new Date();
+  const searchMs = Math.max(6, options?.searchHours ?? 12) * 60 * 60 * 1000;
+  const searchEnd = new Date(startSearch.getTime() + searchMs);
+  const elevationMask = options?.elevationMask_deg ?? ELEVATION_MASK_DEG;
+  let cursor = new Date(startSearch);
+  let bestPass: PassWindow | null = null;
+  const nullAdvanceMs = 95 * 60 * 1000;
+
+  while (cursor < searchEnd) {
+    const nextPass = findNextPass(satrec, gs, cursor, elevationMask);
+    if (!nextPass) {
+      cursor = new Date(cursor.getTime() + nullAdvanceMs);
+      continue;
+    }
+    if (nextPass.aos > searchEnd) break;
+
+    if (!bestPass || nextPass.maxElevation_deg > bestPass.maxElevation_deg) {
+      bestPass = nextPass;
+    }
+
+    cursor = new Date(nextPass.los.getTime() + 5 * 60 * 1000);
+  }
+
+  if (!bestPass || bestPass.maxElevation_deg < 15) return null;
+
+  const tcaMs = bestPass.tca.getTime() - startSearch.getTime();
+
+  // Extend ±300s from TCA and trim to where the geometry drops below -10° elevation.
+  let arcStartMs = tcaMs - 300000;
+  let arcEndMs = tcaMs + 300000;
+  for (let t = tcaMs; t > tcaMs - 400000; t -= 5000) {
+    try {
+      if (getElevation(satrec, gs, new Date(startSearch.getTime() + t)) < -10) { arcStartMs = t; break; }
+    } catch { arcStartMs = t; break; }
+  }
+  for (let t = tcaMs; t < tcaMs + 400000; t += 5000) {
+    try {
+      if (getElevation(satrec, gs, new Date(startSearch.getTime() + t)) < -10) { arcEndMs = t; break; }
+    } catch { arcEndMs = t; break; }
+  }
+
+  const arcDuration = Math.min(900, Math.round((arcEndMs - arcStartMs) / 1000));
+  if (arcDuration < 60) return null;
+
+  const aosDate = new Date(startSearch.getTime() + arcStartMs);
+  const geometry: PassGeometry[] = [];
+  let maxElev = 0;
+  let tcaDate = aosDate;
+
+  for (let s = 0; s <= arcDuration; s++) {
+    const date = new Date(aosDate.getTime() + s * 1000);
+    try {
+      const { position, velocity } = propagate(satrec, date);
+      const geo = computeLookAngles(gs, position, velocity, date, s);
+      if (isNaN(geo.elevation_deg) || isNaN(geo.slantRange_km)) continue;
+      geometry.push(geo);
+      if (geo.elevation_deg > maxElev) { maxElev = geo.elevation_deg; tcaDate = date; }
+    } catch { continue; }
+  }
+
+  if (geometry.length < 60 || maxElev < 15) return null;
+
+  return {
+    aos: aosDate,
+    tca: tcaDate,
+    los: new Date(aosDate.getTime() + arcDuration * 1000),
+    maxElevation_deg: maxElev,
+    durationSeconds: geometry.length - 1,
+    geometry,
+  };
 }
 
 /**
@@ -165,7 +277,6 @@ export function generateDemoPass(
 function generateSyntheticPass(
   gs: GroundStationConfig,
   maxElevation_deg: number,
-  _passDuration_s: number,
 ): PassWindow {
   const now = new Date();
   const aosDate = now;
@@ -217,6 +328,37 @@ function generateSyntheticPass(
     const rangeRate_km_s = 7.5 * Math.sin((t * Math.PI) / 2);
 
     const date = new Date(aosDate.getTime() + s * 1000);
+    const gmst = satellite.gstime(date);
+    const latRad = satellite.degreesToRadians(subSatLat_deg);
+    const lonRad = satellite.degreesToRadians(subSatLon_deg);
+    const satGeodetic = {
+      latitude: latRad,
+      longitude: lonRad,
+      height: altKm,
+    };
+    const ecfPosition = satellite.geodeticToEcf(satGeodetic);
+    const eciPosition = satellite.ecfToEci(ecfPosition, gmst);
+    const eastEcf = {
+      x: -Math.sin(lonRad),
+      y: Math.cos(lonRad),
+      z: 0,
+    };
+    const northEcf = {
+      x: -Math.sin(latRad) * Math.cos(lonRad),
+      y: -Math.sin(latRad) * Math.sin(lonRad),
+      z: Math.cos(latRad),
+    };
+    const velocityDirectionEcf = {
+      x: northEcf.x * Math.cos(headingRad) + eastEcf.x * Math.sin(headingRad),
+      y: northEcf.y * Math.cos(headingRad) + eastEcf.y * Math.sin(headingRad),
+      z: northEcf.z * Math.cos(headingRad) + eastEcf.z * Math.sin(headingRad),
+    };
+    const orbitalSpeed_km_s = 7.55;
+    const eciVelocity = rotateEcfVectorToEci({
+      x: velocityDirectionEcf.x * orbitalSpeed_km_s,
+      y: velocityDirectionEcf.y * orbitalSpeed_km_s,
+      z: velocityDirectionEcf.z * orbitalSpeed_km_s,
+    }, gmst);
 
     geometry.push({
       timestamp: date,
@@ -228,6 +370,8 @@ function generateSyntheticPass(
       altitude_km: altKm,
       subSatLat_deg,
       subSatLon_deg,
+      eciPosition_km: eciPosition,
+      eciVelocity_km_s: eciVelocity,
     });
   }
 
